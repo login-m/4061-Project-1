@@ -28,9 +28,8 @@ void show_error_message(char * lpszFileName)
 //Things to do:
 //1. Check against #3 and #4 (Project1.pdf)
 //2. Check the way of execution (had to change some code to pass simple test cases, so might more change)
-//3. Deal with the main testcase which has all the .c .o files
 //4. Find out about input, do we need this show_target or can we comment it out? also why does their solution echo out the commands even with no -n option set
-//5. Test options
+//5. fix the original ./test [options] [target] --- somehow you can't execute specific target 
 
 
 //recursive implementation of make function
@@ -40,9 +39,11 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 	current->nStatus = RUNNING;
 
 	//[Recursive case]
-	//check if the target has any dependencies; more than 1 -> recur with those dependencies as new targets if needed
+	//check if the target has any dependencies; more than 0 -> recur with those dependencies as new targets if needed
 	//otherwise, fork-exec-wait
 
+	//debug
+	fprintf(stderr, "Target: %s\n", current->szTarget);
 
 	if (current->nDependencyCount > 0)
 	{	
@@ -50,44 +51,49 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		for (int i = 0; i < current->nDependencyCount; i++)
 		{
 			
-			//find dependency in the array of targets
+			//try to find dependency in the array of targets
 			int index = find_target(current->szDependencies[i], targets, nTargetCount);
-			target_t* dependency = &targets[index];
 
-
-			//if dependency does not exist as a target and a file
-			if ((index == -1) && ((is_file_exist(dependency->szTarget)) == -1))
+			//if dependency does not exist as a target
+			if(index==-1)
 			{
-				//update the status of the current target and print the error
-				current->nStatus = INELIGIBLE;
-				perror("the dependent target file doesn't exist!");
-				exit(-1);
-			}
-
-
-			//check if the dependency was already done or not
-			if(dependency->nStatus==FINISHED) continue;
-
-
-			//check if target exists
-			//if it does -> check conditions; otherwise, recurse
-			if (is_file_exist(current->szTarget)!=-1)                     
-			{
-
-				//check if the -B option is set and compare the timestamps of both files
-				//if -B is set or file.c is more recent than file.o -> recurse; otherwise, go to the next dependency/fork-exec-wait
-				if ((*FLAG_B) || ((compare_modification_time(current->szTarget, dependency->szTarget)) == 2))
+				//check if it exists as a file
+				if (is_file_exist(current->szDependencies[i]) == -1)
 				{
-					make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
+					//if it doesnt, update the status of the current target and print the error
+					current->nStatus = INELIGIBLE;
+					fprintf(stderr, "the dependent file doesn't exist : %s\n",current->szDependencies[i]);
+					exit(-1);
 				}
-				else
+				//if it does, go to the next dependency
 					continue;
 			}
+			//if dependency does exist as a target
 			else
 			{
-				make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
-			}
+				//initialize dependency pointer for clarity
+				target_t* dependency = &targets[index];
 
+				//check if the dependency was already processed
+				if(dependency->nStatus==FINISHED) 
+					continue;
+
+				//check if it exists as a file
+				if(is_file_exist(current->szTarget)!=-1)
+				{
+					//if it does, compare the timestamps and check -B flag -> true, recurse ; false, go to the next dependency/fork-exec-wait
+					if ((*FLAG_B) || (compare_modification_time(current->szTarget, dependency->szTarget) == 2))
+						make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
+					else
+						continue;
+									
+				}
+				else
+					make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
+
+				                   
+			}
+			
 		}
 	}
 
@@ -138,8 +144,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 	else
 	{
 		//Print commands, don't execute
-		fprintf(stderr, "pidar%s\n", current->szCommand);
-		fprintf(stderr, "status: %d", *FLAG_n);
+		fprintf(stderr, "%s\n", current->szCommand);
 	}
 	
 }
@@ -221,14 +226,26 @@ int main(int argc, char **argv)
 		strcpy(szTarget, targets[0].szTarget);
 	}
 
-	show_targets(targets, nTargetCount);
+	//show_targets(targets, nTargetCount);
 
 	//Now, the file has been parsed and the targets have been named. 
 	//You'll now want to check all dependencies (whether they are available targets or files) and 
 	//then execute the target that was specified on the command line, along with their dependencies, etc.
 	//Else if no target is mentioned then build the first target found in Makefile.
 
-	make(targets, &targets[0], nTargetCount, &FLAG_B, &FLAG_n);
+	//#####check for empty file
+	//#####probably need a more efficient checking - is_file_exist or smth..
+
+	//#####also ask TA if ./make [option] [target] should still execute a default "Makefile" as a file name argument if -f is ommited
+
+	if(targets)
+	{
+		//find the specified target and start the process
+		int index = find_target(szTarget, targets, nTargetCount);
+		
+		target_t* start = &targets[(index == -1 ? 0 : index)];
+		make(targets, start, nTargetCount, &FLAG_B, &FLAG_n);
+	}
 
 	return EXIT_SUCCESS;
 }
