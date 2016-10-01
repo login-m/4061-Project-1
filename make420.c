@@ -35,6 +35,10 @@ void show_error_message(char * lpszFileName)
 //recursive implementation of make function
 void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, int* FLAG_n)
 {
+	
+	//checks if it needs to be built
+	int build = 1;
+
 	//update the status of the current target
 	current->nStatus = RUNNING;
 
@@ -43,10 +47,11 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 	//otherwise, fork-exec-wait
 
 	//debug
-	fprintf(stderr, "Target: %s\n", current->szTarget);
+	//fprintf(stderr, "Current Target: %s\n", current->szTarget);
 
 	if (current->nDependencyCount > 0)
-	{	
+	{
+
 		//traverse every dependency of the current target
 		for (int i = 0; i < current->nDependencyCount; i++)
 		{
@@ -65,8 +70,9 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 					fprintf(stderr, "the dependent file doesn't exist : %s\n",current->szDependencies[i]);
 					exit(-1);
 				}
-				//if it does, go to the next dependency
-					continue;
+
+				//go to next dependency
+				continue;
 			}
 			//if dependency does exist as a target
 			else
@@ -78,20 +84,9 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 				if(dependency->nStatus==FINISHED) 
 					continue;
 
-				//check if it exists as a file
-				if(is_file_exist(current->szTarget)!=-1)
-				{
-					//if it does, compare the timestamps and check -B flag -> true, recurse ; false, go to the next dependency/fork-exec-wait
-					if ((*FLAG_B) || (compare_modification_time(current->szTarget, dependency->szTarget) == 2))
-						make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
-					else
-						continue;
-									
-				}
-				else
-					make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
-
-				                   
+				//make the dependency new target
+				make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
+		                   
 			}
 			
 		}
@@ -101,7 +96,27 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 	//[Base case]
 	//Check if -n option is set.
 	//It is -> execute; otherwise, just print the command to stdout
-	if (!(*FLAG_n)) 
+
+	//check if it needs to be built
+	if ((!*(FLAG_B)) && is_file_exist(current->szTarget)!=-1)
+	{
+		int status;
+		int count =0;
+		for (int i=0; i<current->nDependencyCount;++i)
+		{
+			int status = compare_modification_time(current->szTarget,current->szDependencies[i]);
+ 			if(status == 1 || status == 0)
+				count++;			
+					
+		}
+		
+		build = (count == current->nDependencyCount ? 0 : 1);
+	}
+
+	//fprintf(stderr,"Is going to build: %d\n",build); //#debug
+
+
+	if (build && (!(*FLAG_n)))
 	{
 
 		//fork-exec-wait
@@ -141,7 +156,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		}
 	}
 
-	else
+	else if (*FLAG_n)
 	{
 		//Print commands, don't execute
 		fprintf(stderr, "%s\n", current->szCommand);

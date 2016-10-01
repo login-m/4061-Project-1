@@ -54,7 +54,7 @@ int compare_modification_time(char * fileName1, char * fileName2)
 	int nTime1 = get_file_modification_time(fileName1);
 	int nTime2 = get_file_modification_time(fileName2);
 
-//	printf("%s - %d  :  %s - %d\n", lpsz1, nTime1, lpsz2, nTime2);
+	//printf("%s - %d  :  %s - %d\n", fileName1, nTime1, fileName2, nTime2);
 
 	if(nTime1 == -1 || nTime2 == -1)
 	{
