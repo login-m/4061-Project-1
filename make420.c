@@ -113,8 +113,8 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		build = (count == current->nDependencyCount ? 0 : 1);
 	}
 
-	//fprintf(stderr,"Is going to build: %d\n",build); //#debug
 
+	if(!build && (!(*FLAG_n))) fprintf(stderr,"The %s is up to date\n", current->szTarget);
 
 	if (build && (!(*FLAG_n)))
 	{
@@ -156,7 +156,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		}
 	}
 
-	else if (*FLAG_n)
+	else if (*FLAG_n && build)
 	{
 		//Print commands, don't execute
 		fprintf(stderr, "%s\n", current->szCommand);

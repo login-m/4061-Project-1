@@ -9,6 +9,6 @@ int main()
 	parse();
 	cal();
 	
-	return 0;
+	return 1;
 }
 
