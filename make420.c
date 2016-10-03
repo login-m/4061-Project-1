@@ -1,7 +1,7 @@
 /* CSci4061 F2016 Assignment 1
 * login: baran109, id2, id3
 * date: 10/05/16
-* name: Makar Baranov, Drew Ketelsen, full name3
+* name: Makar Baranov, Drew Ketelsen, Thanh Trinh
 * id: 5319040, 4976382, id for third name */
 
 #include <errno.h>
@@ -27,13 +27,9 @@ void show_error_message(char * lpszFileName)
 
 //Things to do:
 //1. Check against #3 and #4 (Project1.pdf)
-//2. Check the way of execution (had to change some code to pass simple test cases, so might more change)
-//4. Find out about input, do we need this show_target or can we comment it out? also why does their solution echo out the commands even with no -n option set
-//5. fix the original ./test [options] [target] --- somehow you can't execute specific target 
-
 
 //recursive implementation of make function
-void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, int* FLAG_n)
+void make(target_t targets[], target_t* current, int* nTargetCount,  const char* execName, int* FLAG_B, int* FLAG_n, int* disp_updated)
 {
 	
 	//checks if it needs to be built
@@ -45,10 +41,6 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 	//[Recursive case]
 	//check if the target has any dependencies; more than 0 -> recur with those dependencies as new targets if needed
 	//otherwise, fork-exec-wait
-
-	//debug
-	//fprintf(stderr, "Current Target: %s\n", current->szTarget);
-
 	if (current->nDependencyCount > 0)
 	{
 
@@ -57,7 +49,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		{
 			
 			//try to find dependency in the array of targets
-			int index = find_target(current->szDependencies[i], targets, nTargetCount);
+			int index = find_target(current->szDependencies[i], targets, *nTargetCount);
 
 			//if dependency does not exist as a target
 			if(index==-1)
@@ -67,7 +59,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 				{
 					//if it doesnt, update the status of the current target and print the error
 					current->nStatus = INELIGIBLE;
-					fprintf(stderr, "the dependent file doesn't exist : %s\n",current->szDependencies[i]);
+					fprintf(stderr, "%s: *** The dependent file '%s' doesn't exist. Stop.\n",execName, current->szDependencies[i]);
 					exit(-1);
 				}
 
@@ -84,42 +76,42 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 				if(dependency->nStatus==FINISHED) 
 					continue;
 
-				//make the dependency new target
-				make(targets, dependency, nTargetCount, FLAG_B, FLAG_n);
+				//make the dependency a new target
+				make(targets, dependency, nTargetCount, execName, FLAG_B, FLAG_n, disp_updated);
 		                   
 			}
 			
 		}
 	}
 
-
 	//[Base case]
-	//Check if -n option is set.
-	//It is -> execute; otherwise, just print the command to stdout
-
-	//check if it needs to be built
+	//check if you need to compare modification times and update the build flag if needed
 	if ((!*(FLAG_B)) && is_file_exist(current->szTarget)!=-1)
 	{
-		int status;
-		int count =0;
+		//checks if any of the dependencies is more recent than the current target
+		int status, count = 0;
 		for (int i=0; i<current->nDependencyCount;++i)
 		{
-			int status = compare_modification_time(current->szTarget,current->szDependencies[i]);
+			status = compare_modification_time(current->szTarget,current->szDependencies[i]);
  			if(status == 1 || status == 0)
 				count++;			
 					
 		}
 		
+		//if some of the dependencies need to be built, set the build flag
 		build = (count == current->nDependencyCount ? 0 : 1);
 	}
 
-
-	if(!build && (!(*FLAG_n))) fprintf(stderr,"The %s is up to date\n", current->szTarget);
-
+	//Display up-to-date info if needed
+	if(!build && *disp_updated) 
+		fprintf(stderr,"%s: '%s' is up to date.\n", execName, current->szTarget);
+	
+	//forx-exec-wait 
 	if (build && (!(*FLAG_n)))
 	{
-
-		//fork-exec-wait
+		//print out the command		
+		fprintf(stderr, "%s\n", current->szCommand);
+		
 		pid_t childpid;
 		childpid = fork();
 
@@ -127,18 +119,18 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		if (childpid == -1) 
 		{
 			current->nStatus = INELIGIBLE;
-			perror("failed to fork");
+			fprintf(stderr,"%s: *** Failed to fork. Stop.",execName);
 			exit(-1);
 		}
 
-		//child's code - execture args
+		//child's code - execute the command
 		if (childpid == 0)
 		{
 			execvp(current->prog_args[0], current->prog_args);  
 		}           
 		
 
-		//parent's code - wait for a child
+		//parent's code - wait for the child
 		else
 		{
 			//handle errors
@@ -147,7 +139,7 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 			if (WEXITSTATUS(status) != 0)
 			{
 				current->nStatus = INELIGIBLE;
-				fprintf(stderr, "child exited with error code=%d\n", WEXITSTATUS(status));
+				fprintf(stderr, "%s: *** Child exited with error code=%d. Stop.\n", execName, WEXITSTATUS(status));
 				exit(-1);
 			}
 			
@@ -156,9 +148,9 @@ void make(target_t targets[], target_t* current, int nTargetCount, int* FLAG_B, 
 		}
 	}
 
+	//Print the commands that would be built, don't execute
 	else if (*FLAG_n && build)
 	{
-		//Print commands, don't execute
 		fprintf(stderr, "%s\n", current->szCommand);
 	}
 	
@@ -168,8 +160,8 @@ int main(int argc, char **argv)
 {
 	target_t targets[MAX_NODES]; //List of all the targets. Check structure target_t in util.h to understand what each target will contain.
 	int nTargetCount = 0;
-
-	// Declarations for getopt
+	
+	// Declarations for getopt./tes
 	extern int optind;
 	extern char * optarg;
 	int ch;
@@ -178,10 +170,12 @@ int main(int argc, char **argv)
 	// Variables you'll want to use
 	char szMakefile[64] = "Makefile";
 	char szTarget[64] = "";
+	char* execName = argv[0]+2;
 	int i = 0;
-
+	
 	//Boolean options
 	int FLAG_B = 0, FLAG_n = 0;
+	int disp_updated = 0;
 
 	//init Targets 
 	for (i = 0; i < MAX_NODES; i++)
@@ -201,14 +195,12 @@ int main(int argc, char **argv)
 			strcpy(szMakefile, strdup(optarg));
 			break;
 		case 'n':
-			//Set flag which can be used later to handle this case.
 			FLAG_n = 1;
 			break;
 		case 'B':
-			//Set flag which can be used later to handle this case.
 			FLAG_B = 1;
 			break;
-		case 'h':                                                   //case h???
+		case 'h':                                                  
 		default:
 			show_error_message(argv[0]);
 			exit(1);
@@ -235,6 +227,7 @@ int main(int argc, char **argv)
 	if (argc == 1)
 	{
 		strcpy(szTarget, argv[0]);
+		disp_updated = 1;
 	}
 	else
 	{
@@ -248,18 +241,17 @@ int main(int argc, char **argv)
 	//then execute the target that was specified on the command line, along with their dependencies, etc.
 	//Else if no target is mentioned then build the first target found in Makefile.
 
-	//#####check for empty file
-	//#####probably need a more efficient checking - is_file_exist or smth..
-
-	//#####also ask TA if ./make [option] [target] should still execute a default "Makefile" as a file name argument if -f is ommited
-
 	if(targets)
 	{
 		//find the specified target and start the process
 		int index = find_target(szTarget, targets, nTargetCount);
-		
-		target_t* start = &targets[(index == -1 ? 0 : index)];
-		make(targets, start, nTargetCount, &FLAG_B, &FLAG_n);
+		if(index == -1) 
+		{
+			fprintf(stderr,"%s: *** No rule to make target '%s'. Stop.\n",execName,szTarget);
+			exit(-1);
+		}
+		target_t* start = &targets[index];
+		make(targets, start, &nTargetCount, execName, &FLAG_B, &FLAG_n, &disp_updated);
 	}
 
 	return EXIT_SUCCESS;
