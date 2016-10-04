@@ -1,8 +1,8 @@
 /* CSci4061 F2016 Assignment 1
-* login: baran109, id2, id3
+* login: baran109, id2, Trinh020
 * date: 10/05/16
 * name: Makar Baranov, Drew Ketelsen, Thanh Trinh
-* id: 5319040, 4976382, id for third name */
+* id: 5319040, 4976382, 4578339 */
 
 #include <errno.h>
 #include <fcntl.h>
